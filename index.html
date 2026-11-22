@@ -33,6 +33,9 @@
   --accent:#3F4FF0; --accent-ink:#FFFFFF; --sun:#FFC83D; --sun-ink:#3A2A00;
   --good:#11895A; --bad:#D23D4B; --shadow:0 1px 0 rgba(20,26,46,.05),0 8px 24px -12px rgba(20,26,46,.25); color-scheme:light;
 }
+/* Category colours: one fixed colour per category, validated for colour-blind separation in both themes */
+:root{ --c-food:#3987e5; --c-drinks:#d95926; --c-flight:#199e70; --c-transport:#c98500; --c-stay:#d55181; --c-fun:#008300; --c-shopping:#9085e9; --c-groceries:#e66767; --c-other:#6f7590 }
+:root[data-theme="light"]{ --c-food:#2a78d6; --c-drinks:#eb6834; --c-flight:#1baf7a; --c-transport:#eda100; --c-stay:#e87ba4; --c-fun:#008300; --c-shopping:#6250d6; --c-groceries:#e34948; --c-other:#9aa0b4 }
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;-webkit-tap-highlight-color:transparent}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -306,6 +309,9 @@ details.arch summary{cursor:pointer;font-weight:700;color:var(--muted)}
 .tap{cursor:pointer;border-radius:12px}
 .bal.tap{padding:8px;margin:0 -8px}
 .tap:hover{background:var(--chip)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin:0 0 8px;font-size:12px;font-weight:600;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
 .setup code{background:var(--chip);padding:2px 6px;border-radius:6px;font-size:13px;word-break:break-all}
 </style>
 </head>
@@ -424,7 +430,7 @@ const DEFAULT_METHODS = ["💵 Cash","💳 Card","📱 Phone pay","🏦 Transfer
 const CURRENCIES = ["USD","EUR","GBP","JPY","AUD","CAD","SGD","IDR","THB","MYR","KRW","CNY","HKD","INR","CHF","NZD","MXN","VND","PHP","TWD","AED","BRL","ZAR","SEK","NOK","DKK","PLN","CZK","TRY","HUF","ISK","EGP","MAD","ARS","CLP","COP","PEN","SAR","QAR","ILS","LKR","NPR","KHR","LAK"];
 const MODES = [["equal","Equal"],["exact","Exact"],["percent","%"],["shares","Shares"],["items","Items"],["personal","🔒 Me"]];
 const CHEERS = ["Ka-ching! 💸","Logged it! 🎉","Tracked! ✅","Money moves ✨","Noted, big spender 😎","Receipt? Who needs it 🧾"];
-const APP_VERSION = "2026.11.22-c"; // bump on every release: phones compare this with the live copy and update themselves
+const APP_VERSION = "2026.11.22-d"; // bump on every release: phones compare this with the live copy and update themselves
 const CONFIGURED = /^https:\/\//.test(SUPABASE_URL) && SUPABASE_ANON_KEY.length > 30 && !!window.supabase;
 
 const S = { tripId:null, trip:null, expenses:[], activity:[], loaded:false, loadError:"", busy:false,
@@ -917,6 +923,13 @@ function balancesTab(t, net, f){
     <p class="muted" style="font-size:13px;margin:0">Debts are simplified: the fewest payments that square everyone up.</p></div>`;
 }
 function niceMax(v){ if (v <= 0) return 1; const p = 10 ** Math.floor(Math.log10(v)); for (const m of [1,1.5,2,2.5,3,4,5,6,8,10]) if (m*p >= v) return m*p; return 10*p; }
+const catColor = k => `var(--c-${CATS.some(c => c.k === k) ? k : "other"})`;
+function dailyByCat(t, list){   // like dailyAmounts, but split by category
+  const m = {};
+  for (const e of list){ if (!e.date) continue; const n = Math.max(1, e.days || 1), per = e.amount / n, c = CATS.some(x => x.k === e.cat) ? e.cat : "other";
+    for (let i = 0; i < n; i++){ const d = new Date(e.date + "T12:00:00"); d.setDate(d.getDate() + i); const k = iso(d); if (t.start && k < t.start) continue; (m[k] ||= {})[c] = (m[k][c] || 0) + per; } }
+  return m;
+}
 function dailyChart(t, real){
   const m = dailyAmounts(t, real);
   const keys = Object.keys(m).sort(); if (!keys.length) return "";
@@ -933,22 +946,32 @@ function dailyChart(t, real){
     <line x1="${L}" x2="${W-R}" y1="${y(top/2)}" y2="${y(top/2)}" style="stroke:var(--line)" stroke-dasharray="3 3"/>
     <text x="${L}" y="${y(top)-5}" font-size="11" style="fill:var(--muted)">${esc(fmt(top, t.currency))}</text>
     <text x="${L}" y="${y(top/2)-5}" font-size="11" style="fill:var(--muted)">${esc(fmt(top/2, t.currency))}</text>`;
-  days.forEach((k, i) => { const v = m[k]||0, x = L + i*slot + (slot-bw)/2, yb = T + ph, h = yb - y(v), r = Math.min(4, bw/2, h);
-    const label = `${niceDate(k)} · ${fmt(v, t.currency)}`;
+  const byCat = dailyByCat(t, real), used = CATS.filter(c => days.some(k => (byCat[k] || {})[c.k] > 0));
+  days.forEach((k, i) => { const v = m[k]||0, x = L + i*slot + (slot-bw)/2, yb = T + ph;
+    const parts = used.map(c => [c, (byCat[k] || {})[c.k] || 0]).filter(([, a]) => a > 0);
+    const label = `${niceDate(k)} · ${fmt(v, t.currency)}` + (parts.length > 1 ? " (" + parts.map(([c, a]) => `${c.l} ${fmt(a, t.currency)}`).join(", ") + ")" : "");
     svg += `<rect class="hit" x="${L+i*slot}" y="${T}" width="${slot}" height="${ph+B}" data-act="bar" data-d="${k}" data-label="${esc(label)}" data-i="${i}"><title>${esc(label)}</title></rect>`;
-    if (h > 0) svg += `<path class="b" data-bi="${i}" style="fill:var(--accent);pointer-events:none" d="M${x},${yb} V${yb-h+r} Q${x},${yb-h} ${x+r},${yb-h} H${x+bw-r} Q${x+bw},${yb-h} ${x+bw},${yb-h+r} V${yb} Z"/>`; });
+    // stacked segments, bottom to top in a fixed category order, 2px gap between them, rounded top
+    let acc = 0;
+    parts.forEach(([c, a], j) => {
+      const y0 = y(acc), y1 = y(acc + a), isTop = j === parts.length - 1, gap = isTop ? 0 : 2, h = y0 - y1 - gap; acc += a;
+      if (h <= 0.5) return;
+      const r = isTop ? Math.min(4, bw/2, h) : 0, ty = y1 + gap;
+      svg += `<path class="b" data-bi="${i}" style="fill:${catColor(c.k)};pointer-events:none" d="M${x},${y0} V${ty+r} Q${x},${ty} ${x+r},${ty} H${x+bw-r} Q${x+bw},${ty} ${x+bw},${ty+r} V${y0} Z"/>`;
+    }); });
   svg += `<line x1="${L}" x2="${W-R}" y1="${T+ph}" y2="${T+ph}" style="stroke:var(--muted)" stroke-width="1"/>
     <text x="${L}" y="${H-5}" font-size="11" style="fill:var(--muted)">${esc(new Date(days[0]+"T12:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short"}))}</text>
     <text x="${W-R}" y="${H-5}" font-size="11" text-anchor="end" style="fill:var(--muted)">${esc(new Date(days[days.length-1]+"T12:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short"}))}</text>`;
-  return `<div class="card chart"><div class="row" style="margin-bottom:6px"><span class="label grow">Daily spend${all.length > 31 ? " · last 31 days" : ""}</span></div>
+  const legend = used.length > 1 ? `<div class="legend">${used.map(c => `<span><i style="background:${catColor(c.k)}"></i>${c.e} ${c.l}</span>`).join("")}</div>` : "";
+  return `<div class="card chart"><div class="row" style="margin-bottom:6px"><span class="label grow">Daily spend${all.length > 31 ? " · last 31 days" : ""}</span></div>${legend}
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily spend bar chart">${svg}</svg>
     <div class="note muted num" id="chart-cap" style="margin-top:6px">Tap a bar to see what was spent that day.</div></div>`;
 }
 function statsTab(t, real, total){
   if (!real.length) return `<div class="empty"><span class="big">📊</span><b>No numbers to crunch yet</b><p class="muted">Stats appear after the first expense.</p></div>`;
   const group = (key) => { const m = {}; real.forEach(e => { const k = key(e); m[k] = (m[k]||0) + e.amount; }); return Object.entries(m).sort((a,b)=>b[1]-a[1]); };
-  const block = (title, rows, label) => `<div class="card"><div class="label" style="margin-bottom:6px">${title}</div>${rows.map(([k,v]) =>
-    `<div class="stat"><span>${label(k)}</span><span class="num" style="font-weight:700">${fmt(v, t.currency)} <span class="muted" style="font-weight:500">${Math.round(v/total*100)}%</span></span><div class="bar"><i style="left:0;width:${v/rows[0][1]*100}%;background:var(--accent)"></i></div></div>`).join("")}</div>`;
+  const block = (title, rows, label, colorOf) => `<div class="card"><div class="label" style="margin-bottom:6px">${title}</div>${rows.map(([k,v]) =>
+    `<div class="stat"><span>${label(k)}</span><span class="num" style="font-weight:700">${fmt(v, t.currency)} <span class="muted" style="font-weight:500">${Math.round(v/total*100)}%</span></span><div class="bar"><i style="left:0;width:${v/rows[0][1]*100}%;background:${colorOf ? colorOf(k) : "var(--accent)"}"></i></div></div>`).join("")}</div>`;
   const daily = dailyAmounts(t, real), inTrip = Object.values(daily).reduce((a, b) => a + b, 0);
   const days = tripDaysSoFar(t) || Object.keys(daily).length;
   const pre = real.filter(e => isPre(t, e)).reduce((a, e) => a + e.amount, 0);
@@ -966,7 +989,7 @@ function statsTab(t, real, total){
     </div>
     ${budgetCard(t, real)}
     ${dailyChart(t, real)}
-    ${block("By category", group(e=>e.cat), k => { const c = cat(k); return c.e + " " + c.l; })}
+    ${block("By category", group(e=>e.cat), k => { const c = cat(k); return c.e + " " + c.l; }, catColor)}
     ${block("By payment method", group(e=>e.method||"Other"), k => esc(k))}
     ${Object.keys(places).length ? block("By place", Object.entries(places).sort((a,b)=>b[1]-a[1]), k => "📍 " + esc(k)) : ""}
     ${block("Who paid upfront", group(e=>e.payer), pl)}
@@ -1187,7 +1210,7 @@ function personSheet(pid){
       ${big(v > 0.0001 ? "Gets back" : v < -0.0001 ? "Owes" : "Balance", Math.abs(v) > 0.0001 ? fmt(Math.abs(v), t.currency) : "Square", v > 0.0001 ? "pos" : v < -0.0001 ? "neg" : "")}</div>
     ${r.personal || r.sent || r.got ? `<p class="note muted" style="margin:8px 2px 0">${[r.personal ? `Includes ${fmt(r.personal, t.currency)} personal spending` : "", r.sent ? `paid back ${fmt(r.sent, t.currency)}` : "", r.got ? `received ${fmt(r.got, t.currency)} in pay-backs` : ""].filter(Boolean).join(" · ")}.</p>` : ""}
     ${r.cats.length ? `<div class="card" style="margin-top:12px"><div class="label" style="margin-bottom:6px">By category</div>${r.cats.map(([k, val]) =>
-      `<div class="stat"><span>${cat(k).e} ${cat(k).l}</span><span class="num" style="font-weight:700">${fmt(val, t.currency)} <span class="muted" style="font-weight:500">${Math.round(val / r.total * 100)}%</span></span><div class="bar"><i style="left:0;width:${val / r.cats[0][1] * 100}%;background:var(--accent)"></i></div></div>`).join("")}</div>` : ""}
+      `<div class="stat"><span>${cat(k).e} ${cat(k).l}</span><span class="num" style="font-weight:700">${fmt(val, t.currency)} <span class="muted" style="font-weight:500">${Math.round(val / r.total * 100)}%</span></span><div class="bar"><i style="left:0;width:${val / r.cats[0][1] * 100}%;background:${catColor(k)}"></i></div></div>`).join("")}</div>` : ""}
     <div class="label" style="margin:16px 0 4px">Expenses · their part only (${r.items.length})</div>
     ${r.items.length ? Object.entries(byDay).map(([d, xs]) => `<div class="row day"><span class="label grow">${esc(niceDate(d))}</span><span class="label num">${fmt(xs.reduce((s, x) => s + x.share, 0), t.currency)}</span></div>` + xs.map(({e, share}) => `
       <button type="button" class="exp" data-act="edit-from-person" data-id="${esc(e.id)}"><span class="cat" aria-hidden="true">${cat(e.cat).e}</span>
@@ -1229,7 +1252,7 @@ function daySheet(day){
     </div>
     ${pre ? `<p class="note muted">✈️ This is before the trip started, so it isn't in the daily chart or average.</p>` : ""}
     ${catRows.length > 1 ? `<div class="card" style="margin-top:12px"><div class="label" style="margin-bottom:6px">By category</div>${catRows.map(([k, v]) =>
-      `<div class="stat"><span>${cat(k).e} ${cat(k).l}</span><span class="num" style="font-weight:700">${fmt(v, t.currency)} <span class="muted" style="font-weight:500">${Math.round(v / total * 100)}%</span></span><div class="bar"><i style="left:0;width:${v / catRows[0][1] * 100}%;background:var(--accent)"></i></div></div>`).join("")}</div>` : ""}
+      `<div class="stat"><span>${cat(k).e} ${cat(k).l}</span><span class="num" style="font-weight:700">${fmt(v, t.currency)} <span class="muted" style="font-weight:500">${Math.round(v / total * 100)}%</span></span><div class="bar"><i style="left:0;width:${v / catRows[0][1] * 100}%;background:${catColor(k)}"></i></div></div>`).join("")}</div>` : ""}
     <div class="label" style="margin:16px 0 6px">What was spent (${parts.length})</div>
     ${parts.length ? parts.map(({e, part, n, idx}) => `<button type="button" class="exp" data-act="edit-from-day" data-id="${esc(e.id)}"><span class="cat" aria-hidden="true">${cat(e.cat).e}</span>
       <span class="grow"><div class="t">${esc(e.desc || cat(e.cat).l)}</div><div class="m">${esc([person(t, e.payer).name + " paid", n > 1 ? `day ${idx + 1} of ${n} · ${fmt(e.amount, t.currency)} total` : "", e.place ? "📍 " + e.place : ""].filter(Boolean).join(" · "))}</div></span>
