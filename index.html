@@ -321,7 +321,7 @@ const SUPABASE_URL = "https://ufseixhixstajnxyrupq.supabase.co";       // e.g. h
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVmc2VpeGhpeHN0YWpueHlydXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQxNDkwMzQsImV4cCI6MjEwOTcyNTAzNH0.5r5ApnJD9CSogXzpvlje6oI5njeBVDF7I2Pvcd3vaEc"; // the "anon" / "publishable" key, NOT the service_role key
 /* ======================================================================= */
 
-const CATS = [{k:"food",e:"🍜",l:"Food"},{k:"drinks",e:"🍹",l:"Drinks"},{k:"transport",e:"🚕",l:"Transport"},{k:"stay",e:"🏨",l:"Stay"},{k:"fun",e:"🎢",l:"Fun"},{k:"shopping",e:"🛍️",l:"Shopping"},{k:"groceries",e:"🛒",l:"Groceries"},{k:"other",e:"✨",l:"Other"}];
+const CATS = [{k:"food",e:"🍜",l:"Food"},{k:"drinks",e:"🍹",l:"Drinks"},{k:"flight",e:"✈️",l:"Flight"},{k:"transport",e:"🚕",l:"Transport"},{k:"stay",e:"🏨",l:"Stay"},{k:"fun",e:"🎢",l:"Fun"},{k:"shopping",e:"🛍️",l:"Shopping"},{k:"groceries",e:"🛒",l:"Groceries"},{k:"other",e:"✨",l:"Other"}];
 const TRIP_EMOJI = ["🏝️","🏖️","🏔️","⛰️","🗻","🏕️","🌋","🏜️","🌴","🌸","🍁","❄️","☃️","🌅","🌃","🌉",
   "🗼","🗽","🏰","🏯","⛩️","🕌","🛕","🏛️","🎡","🎢","🎪","🎭",
   "✈️","🚗","🚐","🚂","🚢","⛵","🚲","🛵","🧳","🎒","🗺️","🧭",
@@ -424,7 +424,7 @@ const DEFAULT_METHODS = ["💵 Cash","💳 Card","📱 Phone pay","🏦 Transfer
 const CURRENCIES = ["USD","EUR","GBP","JPY","AUD","CAD","SGD","IDR","THB","MYR","KRW","CNY","HKD","INR","CHF","NZD","MXN","VND","PHP","TWD","AED","BRL","ZAR","SEK","NOK","DKK","PLN","CZK","TRY","HUF","ISK","EGP","MAD","ARS","CLP","COP","PEN","SAR","QAR","ILS","LKR","NPR","KHR","LAK"];
 const MODES = [["equal","Equal"],["exact","Exact"],["percent","%"],["shares","Shares"],["items","Items"],["personal","🔒 Me"]];
 const CHEERS = ["Ka-ching! 💸","Logged it! 🎉","Tracked! ✅","Money moves ✨","Noted, big spender 😎","Receipt? Who needs it 🧾"];
-const APP_VERSION = "2026.11.22-a"; // bump on every release: phones compare this with the live copy and update themselves
+const APP_VERSION = "2026.11.22-b"; // bump on every release: phones compare this with the live copy and update themselves
 const CONFIGURED = /^https:\/\//.test(SUPABASE_URL) && SUPABASE_ANON_KEY.length > 30 && !!window.supabase;
 
 const S = { tripId:null, trip:null, expenses:[], activity:[], loaded:false, loadError:"", busy:false,
@@ -1749,7 +1749,7 @@ async function readImport(file){
     dateFmt:"auto", payer:me() || ((trip().people||[])[0] || {}).id, split:"equal" };
   renderImportSheet();
 }
-const CAT_WORDS = [["stay",/hotel|hostel|airbnb|resort|\binn\b|lodge|booking\.com|agoda/],["transport",/grab|uber|taxi|bus|train|mrt|lrt|flight|airline|air ?asia|fuel|petrol|parking|toll|ferry|gojek|bolt/],
+const CAT_WORDS = [["stay",/hotel|hostel|airbnb|resort|\binn\b|lodge|booking\.com|agoda/],["flight",/flight|airline|airways|air ?asia|scoot|jetstar|singapore air|cathay|emirates|qatar|lufthansa|ryanair|easyjet|boarding|airfare/],["transport",/grab|uber|taxi|bus|train|mrt|lrt|fuel|petrol|parking|toll|ferry|gojek|bolt/],
   ["groceries",/mart|market|grocer|7-?eleven|seven ?eleven|supermarket|family ?mart|lotus|tesco|aeon|big c/],["drinks",/\bbar\b|pub|beer|wine|drink|starbucks|coffee|cafe|kopi|boba|tea/],
   ["food",/restaurant|food|meal|lunch|dinner|breakfast|kfc|mcdonald|burger|pizza|noodle|rice|sushi|eat/],["fun",/ticket|tour|museum|park|cinema|show|spa|klook/],["shopping",/shop|store|mall|amazon|lazada|shopee|uniqlo/]];
 function guessCat(v, desc){
