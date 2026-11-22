@@ -303,6 +303,9 @@ details.arch summary{cursor:pointer;font-weight:700;color:var(--muted)}
 .pass.has-photo .stub::after{display:none}
 .photo-badge{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-size:26px;background:rgba(0,0,0,.35);box-shadow:0 2px 10px rgba(0,0,0,.35);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 .photo-badge.sm{width:30px;height:30px;font-size:17px;position:absolute;right:-6px;bottom:-6px;background:var(--surface)}
+.tap{cursor:pointer;border-radius:12px}
+.bal.tap{padding:8px;margin:0 -8px}
+.tap:hover{background:var(--chip)}
 .setup code{background:var(--chip);padding:2px 6px;border-radius:6px;font-size:13px;word-break:break-all}
 </style>
 </head>
@@ -421,7 +424,7 @@ const DEFAULT_METHODS = ["💵 Cash","💳 Card","📱 Phone pay","🏦 Transfer
 const CURRENCIES = ["USD","EUR","GBP","JPY","AUD","CAD","SGD","IDR","THB","MYR","KRW","CNY","HKD","INR","CHF","NZD","MXN","VND","PHP","TWD","AED","BRL","ZAR","SEK","NOK","DKK","PLN","CZK","TRY","HUF","ISK","EGP","MAD","ARS","CLP","COP","PEN","SAR","QAR","ILS","LKR","NPR","KHR","LAK"];
 const MODES = [["equal","Equal"],["exact","Exact"],["percent","%"],["shares","Shares"],["items","Items"],["personal","🔒 Me"]];
 const CHEERS = ["Ka-ching! 💸","Logged it! 🎉","Tracked! ✅","Money moves ✨","Noted, big spender 😎","Receipt? Who needs it 🧾"];
-const APP_VERSION = "2026.11.13-h"; // bump on every release: phones compare this with the live copy and update themselves
+const APP_VERSION = "2026.11.22-a"; // bump on every release: phones compare this with the live copy and update themselves
 const CONFIGURED = /^https:\/\//.test(SUPABASE_URL) && SUPABASE_ANON_KEY.length > 30 && !!window.supabase;
 
 const S = { tripId:null, trip:null, expenses:[], activity:[], loaded:false, loadError:"", busy:false,
@@ -819,7 +822,7 @@ function tripView(){
 function sideBalances(t, net, f){
   const plan = settlePlan(net);
   return `<div data-keep="side-${esc(t.id)}" class="card desk-only"><div class="label" style="margin-bottom:6px">Balances</div>
-    ${(t.people||[]).map(p => { const v = net[p.id]||0; return `<div class="row" style="padding:5px 0">${face(p)}<b class="grow">${esc(p.name)}</b><span class="num ${v>0?"pos":v<0?"neg":"muted"}" style="font-weight:700">${v>0?"+":v<0?"−":""}${v?fmt(Math.abs(v)/f, t.currency):"square"}</span></div>`; }).join("")}
+    ${(t.people||[]).map(p => { const v = net[p.id]||0; return `<div class="row tap" style="padding:5px 0" data-act="person-share" data-id="${esc(p.id)}" role="button" tabindex="0">${face(p)}<b class="grow">${esc(p.name)}</b><span class="num ${v>0?"pos":v<0?"neg":"muted"}" style="font-weight:700">${v>0?"+":v<0?"−":""}${v?fmt(Math.abs(v)/f, t.currency):"square"}</span></div>`; }).join("")}
     ${plan.length ? `<div class="note muted" style="margin-top:8px">${plan.map(x => `${esc(person(t, x.from).name)} → ${esc(person(t, x.to).name)} ${fmt(x.v/f, t.currency)}`).join("<br>")}</div>` : ""}
     <button class="btn sm ghost block" style="margin-top:10px" data-act="tab" data-tab="balances">Settle up</button></div>`;
 }
@@ -900,14 +903,16 @@ function balancesTab(t, net, f){
   const people = t.people || [];
   const max = Math.max(1, ...Object.values(net).map(Math.abs));
   const rows = people.map(p => { const v = net[p.id]||0, w = Math.abs(v)/max*50;
-    return `<div class="bal">${face(p)}<div><div class="row"><b class="grow">${esc(p.name)}</b><span class="num ${v>0?"pos":v<0?"neg":"muted"}" style="font-weight:700">${v>0?"gets back ":v<0?"owes ":""}${v?fmt(Math.abs(v)/f, t.currency):"square"}</span></div>
+    return `<div class="bal tap" data-act="person-share" data-id="${esc(p.id)}" role="button" tabindex="0" aria-label="See ${esc(p.name)}'s share">${face(p)}<div><div class="row"><b class="grow">${esc(p.name)}</b><span class="num ${v>0?"pos":v<0?"neg":"muted"}" style="font-weight:700">${v>0?"gets back ":v<0?"owes ":""}${v?fmt(Math.abs(v)/f, t.currency):"square"}</span></div>
       <div class="bar mid" style="margin-top:6px"><i style="${v>=0?`left:50%;width:${w}%;background:var(--good)`:`right:50%;width:${w}%;background:var(--bad)`}"></i></div></div></div>`; }).join("");
   const plan = settlePlan(net);
   const planHtml = plan.length ? plan.map(s => { const a = person(t, s.from), b = person(t, s.to);
     return `<div class="settle-row">${face(a)}<div class="grow"><b>${esc(a.name)}</b> pays <b>${esc(b.name)}</b><div class="num" style="font-family:var(--display);font-weight:800;font-size:20px">${fmt(s.v/f, t.currency)}</div></div>
       <button class="btn sm sun" data-act="settle" data-from="${esc(s.from)}" data-to="${esc(s.to)}" data-v="${s.v}">Mark paid</button></div>`; }).join("")
     : `<p class="muted" style="margin:6px 0 0">Everyone's square. Nobody owes anybody anything. 🎉</p>`;
-  return `<div class="stack"><button class="btn sun block" data-act="summary">📸 Share trip summary</button><div class="card"><div class="label" style="margin-bottom:4px">Who's up, who's down</div>${rows || `<p class="muted">Add travellers in the Trip tab.</p>`}</div>
+  return `<div class="stack"><button class="btn sun block" data-act="summary">📸 Share trip summary</button>
+    <div class="card"><div class="label" style="margin-bottom:8px">🧾 Each person's share</div><div class="chips">${people.map(p => `<button class="chip" data-act="person-share" data-id="${esc(p.id)}">${face(p)}${esc(p.name)}</button>`).join("")}</div>
+      <p class="note muted" style="margin:8px 0 0">See only what each person used: their part of every expense, by category, plus their personal spending.</p></div><div class="card"><div class="label" style="margin-bottom:4px">Who's up, who's down</div>${rows || `<p class="muted">Add travellers in the Trip tab.</p>`}</div>
     <div class="card"><div class="label">Settle up in ${plan.length || "zero"} move${plan.length===1?"":"s"}</div>${planHtml}</div>
     <p class="muted" style="font-size:13px;margin:0">Debts are simplified: the fewest payments that square everyone up.</p></div>`;
 }
@@ -1161,6 +1166,42 @@ function binSheet(){
         <button type="button" class="btn sm" data-act="restore" data-id="${esc(e.id)}">Restore</button></div>`).join("")}</div>
       <button type="button" class="btn danger block" style="margin-top:14px" data-act="empty-bin">Empty bin now</button>` : `<p class="muted">Nothing here.</p>`}`);
 }
+function personShare(t, pid){
+  const items = S.expenses.filter(e => e.type !== "settle" && (e.shares||{})[pid] > 0)
+    .map(e => ({e, share:e.shares[pid]})).sort((a, b) => (b.e.date||"").localeCompare(a.e.date||"") || (b.e.createdAt||0) - (a.e.createdAt||0));
+  const total = items.reduce((s, x) => s + x.share, 0), personal = items.filter(x => x.e.mode === "personal").reduce((s, x) => s + x.share, 0);
+  const paid = S.expenses.filter(e => e.type !== "settle" && e.payer === pid).reduce((s, e) => s + e.amount, 0);
+  const sent = S.expenses.filter(e => e.type === "settle" && e.payer === pid).reduce((s, e) => s + e.amount, 0);
+  const got = S.expenses.filter(e => e.type === "settle" && (e.shares||{})[pid]).reduce((s, e) => s + e.shares[pid], 0);
+  const cats = {}; items.forEach(x => cats[x.e.cat] = (cats[x.e.cat] || 0) + x.share);
+  return {items, total, personal, paid, sent, got, cats:Object.entries(cats).sort((a, b) => b[1] - a[1])};
+}
+function personSheet(pid){
+  const t = trip(), p = person(t, pid), r = personShare(t, pid), {net, f} = balances(t, S.expenses), v = (net[pid] || 0) / f;
+  draft = {kind:"person", pid};
+  const big = (label, val, cls) => `<div><div class="label">${label}</div><div class="num ${cls||""}" style="font-family:var(--display);font-weight:800;font-size:20px">${val}</div></div>`;
+  const byDay = {}; r.items.forEach(x => (byDay[x.e.date || ""] ||= []).push(x));
+  openSheet(`<div class="xs-head">${face(p)}<h2 class="grow">${esc(p.name)}'s share</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <div class="card row" style="justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+      ${big("Their share", fmt(r.total, t.currency))}${big("They paid", fmt(r.paid, t.currency))}
+      ${big(v > 0.0001 ? "Gets back" : v < -0.0001 ? "Owes" : "Balance", Math.abs(v) > 0.0001 ? fmt(Math.abs(v), t.currency) : "Square", v > 0.0001 ? "pos" : v < -0.0001 ? "neg" : "")}</div>
+    ${r.personal || r.sent || r.got ? `<p class="note muted" style="margin:8px 2px 0">${[r.personal ? `Includes ${fmt(r.personal, t.currency)} personal spending` : "", r.sent ? `paid back ${fmt(r.sent, t.currency)}` : "", r.got ? `received ${fmt(r.got, t.currency)} in pay-backs` : ""].filter(Boolean).join(" · ")}.</p>` : ""}
+    ${r.cats.length ? `<div class="card" style="margin-top:12px"><div class="label" style="margin-bottom:6px">By category</div>${r.cats.map(([k, val]) =>
+      `<div class="stat"><span>${cat(k).e} ${cat(k).l}</span><span class="num" style="font-weight:700">${fmt(val, t.currency)} <span class="muted" style="font-weight:500">${Math.round(val / r.total * 100)}%</span></span><div class="bar"><i style="left:0;width:${val / r.cats[0][1] * 100}%;background:var(--accent)"></i></div></div>`).join("")}</div>` : ""}
+    <div class="label" style="margin:16px 0 4px">Expenses · their part only (${r.items.length})</div>
+    ${r.items.length ? Object.entries(byDay).map(([d, xs]) => `<div class="row day"><span class="label grow">${esc(niceDate(d))}</span><span class="label num">${fmt(xs.reduce((s, x) => s + x.share, 0), t.currency)}</span></div>` + xs.map(({e, share}) => `
+      <button type="button" class="exp" data-act="edit-from-person" data-id="${esc(e.id)}"><span class="cat" aria-hidden="true">${cat(e.cat).e}</span>
+        <span class="grow"><div class="t">${esc(e.desc || cat(e.cat).l)}</div><div class="m">${esc([e.mode === "personal" ? "🔒 personal" : `of ${fmt(e.amount, t.currency)}`, person(t, e.payer).name + " paid", e.place ? "📍 " + e.place : ""].filter(Boolean).join(" · "))}</div></span>
+        <span class="amt num">${fmt(share, t.currency)}</span></button>`).join("")).join("")
+      : `<p class="muted">${esc(p.name)} isn't part of any expense yet.</p>`}
+    <div class="sheet-foot"><button type="button" class="btn ghost block" data-act="copy-share">📋 Copy as text</button></div>`);
+}
+function personShareText(pid){
+  const t = trip(), p = person(t, pid), r = personShare(t, pid), {net, f} = balances(t, S.expenses), v = (net[pid] || 0) / f;
+  const lines = [`${t.emoji || "✈️"} ${t.name}: ${p.name}'s share`, `Total share: ${fmt(r.total, t.currency)} · Paid: ${fmt(r.paid, t.currency)} · ${v > 0.0001 ? "Gets back " + fmt(v, t.currency) : v < -0.0001 ? "Owes " + fmt(-v, t.currency) : "All square"}`, ""];
+  r.items.slice().reverse().forEach(({e, share}) => lines.push(`${e.date || ""}  ${e.desc || cat(e.cat).l}  ${fmt(share, t.currency)}${e.mode === "personal" ? " (personal)" : ` of ${fmt(e.amount, t.currency)}`}`));
+  return lines.join("\n");
+}
 function settleSheet(from, to, minor){
   const t = trip(), f = 10 ** decimals(t.currency);
   draft = { kind:"exp", id:null, type:"settle", to, amount:String(minor / f), cur:t.currency, rate:"1", desc:"", cat:"other", payer:from,
@@ -1408,6 +1449,10 @@ document.addEventListener("click", async ev => {
   if (act === "theme" || act === "theme-set"){ const th = act === "theme-set" ? el.dataset.v : (document.documentElement.dataset.theme === "light" ? "dark" : "light"); lsSet("ww-theme", th); applyTheme(th); return render(); }
   if (act === "archive"){ const on = el.dataset.v === "1"; setArchived(t.id, on); toast(on ? "Archived 📦 Find it under Archived trips." : "Back in your trips 📤"); if (on) return go(null); return render(); }
   if (act === "summary") return shareSummary();
+  if (act === "person-share") return personSheet(el.dataset.id);
+  if (act === "edit-from-person"){ const e = S.expenses.find(x => x.id === el.dataset.id); if (e) expenseSheet(e); return; }
+  if (act === "copy-share" && draft && draft.kind === "person"){ const txt = personShareText(draft.pid);
+    try { await navigator.clipboard.writeText(txt); toast("Copied 📋 Paste it into any chat"); } catch { if (navigator.share) { try { await navigator.share({text:txt}); } catch {} } else toast("Couldn't copy on this device."); } return; }
   if (act === "open-bin") return binSheet();
   if (act === "restore") return restoreExpense(el.dataset.id);
   if (act === "empty-bin"){
