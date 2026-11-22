@@ -424,7 +424,7 @@ const DEFAULT_METHODS = ["💵 Cash","💳 Card","📱 Phone pay","🏦 Transfer
 const CURRENCIES = ["USD","EUR","GBP","JPY","AUD","CAD","SGD","IDR","THB","MYR","KRW","CNY","HKD","INR","CHF","NZD","MXN","VND","PHP","TWD","AED","BRL","ZAR","SEK","NOK","DKK","PLN","CZK","TRY","HUF","ISK","EGP","MAD","ARS","CLP","COP","PEN","SAR","QAR","ILS","LKR","NPR","KHR","LAK"];
 const MODES = [["equal","Equal"],["exact","Exact"],["percent","%"],["shares","Shares"],["items","Items"],["personal","🔒 Me"]];
 const CHEERS = ["Ka-ching! 💸","Logged it! 🎉","Tracked! ✅","Money moves ✨","Noted, big spender 😎","Receipt? Who needs it 🧾"];
-const APP_VERSION = "2026.11.22-b"; // bump on every release: phones compare this with the live copy and update themselves
+const APP_VERSION = "2026.11.22-c"; // bump on every release: phones compare this with the live copy and update themselves
 const CONFIGURED = /^https:\/\//.test(SUPABASE_URL) && SUPABASE_ANON_KEY.length > 30 && !!window.supabase;
 
 const S = { tripId:null, trip:null, expenses:[], activity:[], loaded:false, loadError:"", busy:false,
@@ -878,7 +878,7 @@ function expList(t, exps, m){
     const dayTotal = items.filter(isShared).reduce((s,e)=>s+e.amount,0);
     let pre = "";
     if (t.start && d && d < t.start && !preShown){ preShown = true; pre = `<div class="pre-head row"><span class="grow">✈️ Before the trip</span><span class="num">${preTotal ? fmt(preTotal, t.currency) : ""}</span></div>`; }
-    return pre + `<div class="row day"><span class="label grow">${esc(niceDate(d))}</span><span class="label num">${dayTotal ? fmt(dayTotal, t.currency) : ""}</span></div>` +
+    return pre + `<div class="row day tap" data-act="day-sheet" data-d="${esc(d)}" role="button" tabindex="0" title="See that day's breakdown"><span class="label grow">${esc(niceDate(d))}</span><span class="label num">${dayTotal ? fmt(dayTotal, t.currency) : ""}</span></div>` +
     items.map(e => {
       const payer = person(t, e.payer);
       if (e.type === "settle"){
@@ -935,14 +935,14 @@ function dailyChart(t, real){
     <text x="${L}" y="${y(top/2)-5}" font-size="11" style="fill:var(--muted)">${esc(fmt(top/2, t.currency))}</text>`;
   days.forEach((k, i) => { const v = m[k]||0, x = L + i*slot + (slot-bw)/2, yb = T + ph, h = yb - y(v), r = Math.min(4, bw/2, h);
     const label = `${niceDate(k)} · ${fmt(v, t.currency)}`;
-    svg += `<rect class="hit" x="${L+i*slot}" y="${T}" width="${slot}" height="${ph+B}" data-act="bar" data-label="${esc(label)}" data-i="${i}"><title>${esc(label)}</title></rect>`;
+    svg += `<rect class="hit" x="${L+i*slot}" y="${T}" width="${slot}" height="${ph+B}" data-act="bar" data-d="${k}" data-label="${esc(label)}" data-i="${i}"><title>${esc(label)}</title></rect>`;
     if (h > 0) svg += `<path class="b" data-bi="${i}" style="fill:var(--accent);pointer-events:none" d="M${x},${yb} V${yb-h+r} Q${x},${yb-h} ${x+r},${yb-h} H${x+bw-r} Q${x+bw},${yb-h} ${x+bw},${yb-h+r} V${yb} Z"/>`; });
   svg += `<line x1="${L}" x2="${W-R}" y1="${T+ph}" y2="${T+ph}" style="stroke:var(--muted)" stroke-width="1"/>
     <text x="${L}" y="${H-5}" font-size="11" style="fill:var(--muted)">${esc(new Date(days[0]+"T12:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short"}))}</text>
     <text x="${W-R}" y="${H-5}" font-size="11" text-anchor="end" style="fill:var(--muted)">${esc(new Date(days[days.length-1]+"T12:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short"}))}</text>`;
   return `<div class="card chart"><div class="row" style="margin-bottom:6px"><span class="label grow">Daily spend${all.length > 31 ? " · last 31 days" : ""}</span></div>
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily spend bar chart">${svg}</svg>
-    <div class="note muted num" id="chart-cap" style="margin-top:6px">Tap a bar to see that day's total.</div></div>`;
+    <div class="note muted num" id="chart-cap" style="margin-top:6px">Tap a bar to see what was spent that day.</div></div>`;
 }
 function statsTab(t, real, total){
   if (!real.length) return `<div class="empty"><span class="big">📊</span><b>No numbers to crunch yet</b><p class="muted">Stats appear after the first expense.</p></div>`;
@@ -1201,6 +1201,40 @@ function personShareText(pid){
   const lines = [`${t.emoji || "✈️"} ${t.name}: ${p.name}'s share`, `Total share: ${fmt(r.total, t.currency)} · Paid: ${fmt(r.paid, t.currency)} · ${v > 0.0001 ? "Gets back " + fmt(v, t.currency) : v < -0.0001 ? "Owes " + fmt(-v, t.currency) : "All square"}`, ""];
   r.items.slice().reverse().forEach(({e, share}) => lines.push(`${e.date || ""}  ${e.desc || cat(e.cat).l}  ${fmt(share, t.currency)}${e.mode === "personal" ? " (personal)" : ` of ${fmt(e.amount, t.currency)}`}`));
   return lines.join("\n");
+}
+// What makes up one day's spend: shared expenses on that day, with multi-day costs counted as that day's slice.
+function dayParts(t, day){
+  const out = [];
+  for (const e of S.expenses){
+    if (!e.date || e.type === "settle") continue;
+    const n = Math.max(1, e.days || 1), idx = dayDiff(e.date, day);
+    if (idx < 0 || idx >= n) continue;
+    out.push({e, part:e.amount / n, n, idx});
+  }
+  return out;
+}
+function daySheet(day){
+  const t = trip(); if (!t || !day) return;
+  const all = dayParts(t, day), parts = all.filter(x => isShared(x.e)).sort((a, b) => b.part - a.part), pers = all.filter(x => x.e.mode === "personal");
+  const pre = t.start && day < t.start, total = parts.reduce((s, x) => s + x.part, 0);
+  const cats = {}; parts.forEach(x => cats[x.e.cat] = (cats[x.e.cat] || 0) + x.part);
+  const catRows = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+  const avgDays = tripDaysSoFar(t) || Object.keys(dailyAmounts(t, S.expenses.filter(isShared))).length;
+  const avg = Object.values(dailyAmounts(t, S.expenses.filter(isShared))).reduce((a, b) => a + b, 0) / Math.max(1, avgDays);
+  draft = {kind:"day", day};
+  openSheet(`<div class="xs-head"><h2 class="grow">${esc(niceDate(day))} 📅</h2><button type="button" class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
+    <div class="card row" style="justify-content:space-around;text-align:center;flex-wrap:wrap;gap:12px">
+      <div><div class="label">Spent that day</div><div class="num" style="font-family:var(--display);font-weight:800;font-size:24px">${fmt(total, t.currency)}</div></div>
+      ${!pre && avg > 0 ? `<div><div class="label">vs trip average</div><div class="num ${total > avg ? "neg" : "pos"}" style="font-family:var(--display);font-weight:800;font-size:24px">${total >= avg ? "+" : "−"}${fmt(Math.abs(total - avg), t.currency)}</div></div>` : ""}
+    </div>
+    ${pre ? `<p class="note muted">✈️ This is before the trip started, so it isn't in the daily chart or average.</p>` : ""}
+    ${catRows.length > 1 ? `<div class="card" style="margin-top:12px"><div class="label" style="margin-bottom:6px">By category</div>${catRows.map(([k, v]) =>
+      `<div class="stat"><span>${cat(k).e} ${cat(k).l}</span><span class="num" style="font-weight:700">${fmt(v, t.currency)} <span class="muted" style="font-weight:500">${Math.round(v / total * 100)}%</span></span><div class="bar"><i style="left:0;width:${v / catRows[0][1] * 100}%;background:var(--accent)"></i></div></div>`).join("")}</div>` : ""}
+    <div class="label" style="margin:16px 0 6px">What was spent (${parts.length})</div>
+    ${parts.length ? parts.map(({e, part, n, idx}) => `<button type="button" class="exp" data-act="edit-from-day" data-id="${esc(e.id)}"><span class="cat" aria-hidden="true">${cat(e.cat).e}</span>
+      <span class="grow"><div class="t">${esc(e.desc || cat(e.cat).l)}</div><div class="m">${esc([person(t, e.payer).name + " paid", n > 1 ? `day ${idx + 1} of ${n} · ${fmt(e.amount, t.currency)} total` : "", e.place ? "📍 " + e.place : ""].filter(Boolean).join(" · "))}</div></span>
+      <span class="amt num">${fmt(part, t.currency)}</span></button>`).join("") : `<p class="muted">Nothing shared was spent this day.</p>`}
+    ${pers.length ? `<p class="note muted" style="margin-top:10px">🔒 Not counted: ${pers.length} personal expense${pers.length === 1 ? "" : "s"} (${fmt(pers.reduce((s, x) => s + x.part, 0), t.currency)}).</p>` : ""}`);
 }
 function settleSheet(from, to, minor){
   const t = trip(), f = 10 ** decimals(t.currency);
@@ -1469,7 +1503,9 @@ document.addEventListener("click", async ev => {
   if (act === "native-share"){ try { await navigator.share({title:"Wander Wallet: " + t.name, text:`Join our Wander Wallet for ${t.name} ✈️ Add what you spend, we do the maths.`, url:tripLink(t.id)}); } catch {} return; }
   if (act === "clear-filters"){ S.q = S.fCat = S.fWho = S.fMethod = ""; return render(); }
   if (act === "bar"){ const cap = $("#chart-cap"); if (cap) cap.textContent = el.dataset.label;
-    document.querySelectorAll(".chart .b").forEach(b => b.classList.toggle("sel", b.dataset.bi === el.dataset.i)); return; }
+    document.querySelectorAll(".chart .b").forEach(b => b.classList.toggle("sel", b.dataset.bi === el.dataset.i)); return daySheet(el.dataset.d); }
+  if (act === "day-sheet") return daySheet(el.dataset.d);
+  if (act === "edit-from-day"){ const e = S.expenses.find(x => x.id === el.dataset.id); if (e) expenseSheet(e); return; }
   if (act === "me"){ const k = "ww-me-" + t.id; lsSet(k, lsGet(k) === el.dataset.id ? "" : el.dataset.id); return render(); }
   if (act === "pick-me"){ lsSet("ww-me-" + t.id, el.dataset.id); closeSheet(); toast(`Hi ${person(t, el.dataset.id).name}! 👋`); return render(); }
   if (act === "edit"){ const e = S.expenses.find(x => x.id === el.dataset.id); if (e) expenseSheet(e); return; }
